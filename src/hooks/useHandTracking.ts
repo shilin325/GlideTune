@@ -29,12 +29,21 @@ interface UseHandTrackingOptions {
   onGesture?: (gesture: HandGesture, frame: HandFrame) => void
 }
 
+type ProgressCb = (progress: number, label: string) => void
+
 type InitState =
   | { status: 'idle' }
   | { status: 'pending'; promise: Promise<GestureRecognizer> }
   | { status: 'ready'; recognizer: GestureRecognizer }
 
 let initState: InitState = { status: 'idle' }
+/** 当前初始化进度监听（多处同时开启时共享） */
+let progressListeners = new Set<ProgressCb>()
+
+function emitProgress(progress: number, label: string) {
+  const p = Math.max(0, Math.min(1, progress))
+  progressListeners.forEach((cb) => cb(p, label))
+}
 
 function errorMessage(e: unknown): string {
   if (!e) return '手势识别初始化失败'
@@ -51,24 +60,100 @@ function errorMessage(e: unknown): string {
   }
 }
 
+/** 带进度的资源预取，便于浏览器缓存后再交给 MediaPipe */
+async function fetchWithProgress(
+  url: string,
+  onChunk: (loaded: number, total: number) => void,
+): Promise<void> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`资源加载失败 (${res.status})`)
+
+  const total = Number(res.headers.get('content-length')) || 0
+  const reader = res.body?.getReader()
+  if (!reader) {
+    await res.arrayBuffer()
+    onChunk(1, 1)
+    return
+  }
+
+  let loaded = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    loaded += value.byteLength
+    onChunk(loaded, total > 0 ? total : loaded)
+  }
+  if (total > 0) onChunk(total, total)
+}
+
+async function prefetchHandAssets() {
+  const wasmBase = assetUrl('mediapipe/wasm')
+  const modelUrl = assetUrl('mediapipe/models/gesture_recognizer.task')
+
+  // wasm ~55%，模型 ~30%，剩余留给 init / 摄像头
+  const assets: { url: string; weight: number; label: string }[] = [
+    {
+      url: `${wasmBase}/vision_wasm_internal.wasm`,
+      weight: 0.5,
+      label: '下载推理引擎…',
+    },
+    {
+      url: `${wasmBase}/vision_wasm_internal.js`,
+      weight: 0.05,
+      label: '下载推理脚本…',
+    },
+    {
+      url: modelUrl,
+      weight: 0.3,
+      label: '下载手势模型…',
+    },
+  ]
+
+  let base = 0.02
+  emitProgress(base, '准备加载手势资源…')
+
+  for (const asset of assets) {
+    try {
+      await fetchWithProgress(asset.url, (loaded, total) => {
+        const ratio = total > 0 ? Math.min(1, loaded / total) : 0.5
+        emitProgress(base + ratio * asset.weight, asset.label)
+      })
+    } catch {
+      // 预取失败不阻断：MediaPipe 仍会自行请求（可能无精细进度）
+      emitProgress(base + asset.weight * 0.5, `${asset.label}（改用内置加载）`)
+    }
+    base += asset.weight
+  }
+
+  emitProgress(0.88, '初始化识别引擎…')
+}
+
 async function createRecognizer(): Promise<GestureRecognizer> {
+  await prefetchHandAssets()
+
   const vision = await FilesetResolver.forVisionTasks(assetUrl('mediapipe/wasm'))
+  emitProgress(0.92, '加载手势模型…')
   const modelAssetPath = assetUrl('mediapipe/models/gesture_recognizer.task')
 
   // 先 CPU：兼容性更好；GPU 在部分环境会因 WebGL context 创建失败
   try {
-    return await GestureRecognizer.createFromOptions(vision, {
+    const recognizer = await GestureRecognizer.createFromOptions(vision, {
       baseOptions: { modelAssetPath, delegate: 'CPU' },
       runningMode: 'VIDEO',
       numHands: 1,
     })
+    emitProgress(0.96, '模型就绪')
+    return recognizer
   } catch (cpuErr) {
+    emitProgress(0.93, '尝试 GPU 加速…')
     try {
-      return await GestureRecognizer.createFromOptions(vision, {
+      const recognizer = await GestureRecognizer.createFromOptions(vision, {
         baseOptions: { modelAssetPath, delegate: 'GPU' },
         runningMode: 'VIDEO',
         numHands: 1,
       })
+      emitProgress(0.96, '模型就绪')
+      return recognizer
     } catch {
       throw cpuErr
     }
@@ -77,6 +162,7 @@ async function createRecognizer(): Promise<GestureRecognizer> {
 
 function getOrCreateRecognizer(): Promise<GestureRecognizer> {
   if (initState.status === 'ready') {
+    emitProgress(0.97, '使用已缓存模型…')
     return Promise.resolve(initState.recognizer)
   }
   if (initState.status === 'pending') {
@@ -110,7 +196,6 @@ function disposeRecognizer() {
   if (initState.status === 'pending') {
     const pending = initState.promise
     initState = { status: 'idle' }
-    // 初始化完成后立刻关掉，避免泄漏 / 与下次 init 冲突
     void pending
       .then((r) => {
         try {
@@ -155,7 +240,6 @@ export function useHandTracking({ enabled, onGesture }: UseHandTrackingOptions) 
   const onGestureRef = useRef(onGesture)
   const lastStaticRef = useRef<HandGesture>('none')
   const lastEmitAtRef = useRef(0)
-  /** 静态手势连续稳定帧计数，降低误触 */
   const staticHoldRef = useRef<{ gesture: HandGesture; frames: number }>({
     gesture: 'none',
     frames: 0,
@@ -165,6 +249,8 @@ export function useHandTracking({ enabled, onGesture }: UseHandTrackingOptions) 
   const [status, setStatus] = useState<HandTrackingStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const [frame, setFrame] = useState<HandFrame | null>(null)
+  const [loadProgress, setLoadProgress] = useState(0)
+  const [loadLabel, setLoadLabel] = useState('')
   const frameRef = useRef<HandFrame | null>(null)
   const lastUiPushRef = useRef(0)
   const hadHandRef = useRef(false)
@@ -191,7 +277,6 @@ export function useHandTracking({ enabled, onGesture }: UseHandTrackingOptions) 
     if (gesture === 'none') return
     const now = next.timestamp
     const isSwipe = gesture.startsWith('swipe_')
-    // 捏合用于布局切换，冷却略长，避免连触发
     const gap = gesture === 'pinch' ? 1200 : isSwipe ? 650 : 850
     if (now - lastEmitAtRef.current < gap) return
     if (!isSwipe && lastStaticRef.current === gesture && now - lastEmitAtRef.current < 1100) {
@@ -210,11 +295,20 @@ export function useHandTracking({ enabled, onGesture }: UseHandTrackingOptions) 
       disposeRecognizer()
       setStatus('idle')
       setError(null)
+      setLoadProgress(0)
+      setLoadLabel('')
       return
     }
 
     const runId = ++runIdRef.current
     const isCancelled = () => runId !== runIdRef.current
+
+    const onProgress: ProgressCb = (progress, label) => {
+      if (isCancelled()) return
+      setLoadProgress(progress)
+      setLoadLabel(label)
+    }
+    progressListeners.add(onProgress)
 
     const loop = () => {
       if (isCancelled()) return
@@ -269,7 +363,6 @@ export function useHandTracking({ enabled, onGesture }: UseHandTrackingOptions) 
             lastStaticRef.current = 'none'
           } else if (staticHoldRef.current.gesture === gesture) {
             staticHoldRef.current.frames += 1
-            // 捏合稍快触发（约 3 帧），其它静态手势保持原阈值
             const need = gesture === 'pinch' ? 3 : STATIC_HOLD_FRAMES
             if (staticHoldRef.current.frames === need) {
               tryEmit(gesture, next)
@@ -295,11 +388,14 @@ export function useHandTracking({ enabled, onGesture }: UseHandTrackingOptions) 
     const start = async () => {
       setStatus('loading')
       setError(null)
+      setLoadProgress(0.01)
+      setLoadLabel('准备加载手势资源…')
       try {
         const recognizer = await getOrCreateRecognizer()
         if (isCancelled()) return
         recognizerRef.current = recognizer
 
+        emitProgress(0.97, '请求摄像头权限…')
         if (!navigator.mediaDevices?.getUserMedia) {
           throw new Error('当前环境不支持摄像头（需要 HTTPS 或 localhost）')
         }
@@ -318,6 +414,7 @@ export function useHandTracking({ enabled, onGesture }: UseHandTrackingOptions) 
         }
         streamRef.current = stream
 
+        emitProgress(0.99, '启动摄像头…')
         const video = await waitForVideo(() => videoRef.current, isCancelled)
         video.srcObject = stream
         video.muted = true
@@ -325,12 +422,13 @@ export function useHandTracking({ enabled, onGesture }: UseHandTrackingOptions) 
           await video.play()
         } catch (playErr) {
           const name = (playErr as DOMException)?.name
-          // 被清理中断时忽略；其它播放错误仍提示
           if (isCancelled() || name === 'AbortError') return
           throw playErr
         }
         if (isCancelled()) return
 
+        setLoadProgress(1)
+        setLoadLabel('完成')
         setStatus('ready')
         rafRef.current = requestAnimationFrame(loop)
       } catch (e) {
@@ -351,14 +449,16 @@ export function useHandTracking({ enabled, onGesture }: UseHandTrackingOptions) 
           recognizerRef.current = null
           disposeRecognizer()
         }
+      } finally {
+        progressListeners.delete(onProgress)
       }
     }
 
     void start()
 
     return () => {
-      // 使进行中的 start/loop 失效；保留已创建的 Recognizer 供 Strict Mode 二次挂载复用
       runIdRef.current += 1
+      progressListeners.delete(onProgress)
       stopCamera()
     }
   }, [enabled, stopCamera, tryEmit])
@@ -378,5 +478,8 @@ export function useHandTracking({ enabled, onGesture }: UseHandTrackingOptions) 
     error,
     frame,
     frameRef,
+    /** 0~1，首次加载模型/资源进度 */
+    loadProgress,
+    loadLabel,
   }
 }

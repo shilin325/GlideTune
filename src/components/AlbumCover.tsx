@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDrag } from '@use-gesture/react'
-import type { Song } from '../types'
+import { DEFAULT_BPM, type Song } from '../types'
+
+/** 将 BPM 限制在合理区间，返回一拍时长（ms） */
+function beatDurationMs(bpm?: number) {
+  const n = Number.isFinite(bpm) ? (bpm as number) : DEFAULT_BPM
+  const clamped = Math.min(220, Math.max(40, n))
+  return 60_000 / clamped
+}
 
 /** 水平滑动超过该阈值（px）才触发切歌 */
 const SWIPE_THRESHOLD = 50
@@ -33,12 +40,14 @@ interface AlbumCoverProps {
   onNext: () => boolean
   onBoundary: (dir: 'left' | 'right') => void
   onSelect?: (index: number) => void
+  /** 双击当前大封面：三维 / 平铺切换 */
+  onToggleLayout?: () => void
 }
 
 /**
  * 三维圆柱环绕封面 / 捏合后的平铺列表：
- * - orbit：保持原有圆柱环绕布局与交互
- * - flat：当前曲大封面 + 其余横向平铺，点击切歌
+ * - orbit：保持原有圆柱环绕布局与交互；双击当前封面切平铺
+ * - flat：当前曲大封面 + 其余横向平铺；双击大封面回环绕，点小封面切歌
  */
 export function AlbumCover({
   songs,
@@ -51,6 +60,7 @@ export function AlbumCover({
   onNext,
   onBoundary,
   onSelect,
+  onToggleLayout,
 }: AlbumCoverProps) {
   const count = songs.length
   const angleStep = count > 0 ? 360 / count : 0
@@ -221,20 +231,29 @@ export function AlbumCover({
           {current && (
             <button
               type="button"
-              onClick={() => onSelect?.(currentIndex)}
-              className="relative shrink-0 overflow-hidden bg-neutral-200 shadow-2xl shadow-neutral-900/25 outline outline-2 outline-white/90 transition-transform duration-500"
+              onDoubleClick={(e) => {
+                e.preventDefault()
+                onToggleLayout?.()
+              }}
+              className="relative shrink-0 cursor-pointer overflow-hidden bg-neutral-200 shadow-2xl shadow-neutral-900/25 outline outline-2 outline-white/90"
               style={{
                 width: FLAT_HERO_SIZE,
                 height: FLAT_HERO_SIZE,
-                transform: isPlaying ? 'scale(1.02)' : 'scale(1)',
               }}
-              aria-label={`当前播放 ${current.title}`}
+              aria-label={`双击切换布局 · ${current.title}`}
             >
               <img
                 src={current.cover}
                 alt={`${current.title} cover`}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover will-change-transform"
                 draggable={false}
+                style={
+                  isPlaying
+                    ? {
+                        animation: `cover-beat ${beatDurationMs(current.bpm)}ms ease-out infinite`,
+                      }
+                    : undefined
+                }
               />
               {isPlaying && (
                 <span className="absolute bottom-2 right-2 rounded-full bg-neutral-900/75 px-2 py-0.5 text-[10px] font-medium tracking-wide text-white">
@@ -278,7 +297,7 @@ export function AlbumCover({
         </div>
 
         <p className="pointer-events-none mt-1 text-center text-[11px] tracking-wide text-neutral-400">
-          捏合返回环绕 · 点封面切歌
+          双击大封面/捏合返回环绕 · 点小封面切歌
         </p>
       </div>
     )
@@ -291,6 +310,7 @@ export function AlbumCover({
     <div className="relative flex w-full flex-1 flex-col items-center justify-center overflow-visible">
       <div
         {...bind()}
+        onDoubleClick={() => onToggleLayout?.()}
         className={`relative w-full touch-none select-none overflow-visible ${bounce ? 'animate-shake' : ''}`}
         style={{
           height: stageHeight,
@@ -343,6 +363,7 @@ export function AlbumCover({
                   alt={`${song.title} cover`}
                   active={isActive}
                   playing={isPlaying}
+                  bpm={song.bpm}
                   side="front"
                 />
                 <CoverFace
@@ -359,7 +380,7 @@ export function AlbumCover({
       </div>
 
       <p className="pointer-events-none mt-1 text-center text-[11px] tracking-wide text-neutral-400">
-        左右滑环绕切换 · 捏合平铺
+        左右滑环绕切换 · 双击切换布局
       </p>
     </div>
   )
@@ -370,14 +391,17 @@ function CoverFace({
   alt,
   active,
   playing,
+  bpm,
   side,
 }: {
   src: string
   alt: string
   active: boolean
   playing: boolean
+  bpm?: number
   side: 'front' | 'back'
 }) {
+  const beat = active && playing
   return (
     <div
       className="absolute inset-0 overflow-hidden bg-neutral-200"
@@ -394,12 +418,15 @@ function CoverFace({
       <img
         src={src}
         alt={alt}
-        className="h-full w-full object-cover"
+        className="h-full w-full object-cover will-change-transform"
         draggable={false}
-        style={{
-          transform: active && playing ? 'scale(1.03)' : 'scale(1)',
-          transition: 'transform 0.5s ease',
-        }}
+        style={
+          beat
+            ? {
+                animation: `cover-beat ${beatDurationMs(bpm)}ms ease-out infinite`,
+              }
+            : undefined
+        }
       />
       {side === 'front' && !active && (
         <div className="pointer-events-none absolute inset-0 bg-black/15" />

@@ -1,3 +1,4 @@
+import { DEFAULT_BPM } from '../types'
 import {
   FALL_DURATION,
   GOOD_WINDOW,
@@ -23,9 +24,13 @@ function shouldDouble(songId: number, beatIndex: number): boolean {
 
 /**
  * 根据曲目与时长预生成音符表。
- * BPM 默认 118，按 1/2 拍生成（八分音符节奏感）。
+ * BPM 缺省用 DEFAULT_BPM，按 1/2 拍生成（八分音符节奏感）。
  */
-export function generateChart(songId: number, duration: number, bpm = 118): RhythmNote[] {
+export function generateChart(
+  songId: number,
+  duration: number,
+  bpm: number = DEFAULT_BPM,
+): RhythmNote[] {
   if (!Number.isFinite(duration) || duration <= 2) {
     // 时长未知时先铺一段可玩谱
     duration = 90

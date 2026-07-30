@@ -7,6 +7,7 @@ import type { Song } from '../types'
 import { AlbumCover, type CoverLayout } from './AlbumCover'
 import { Controls } from './Controls'
 import { FavoritesDrawer } from './FavoritesDrawer'
+import { FeatureIntro } from './FeatureIntro'
 import { HandParticleLayer } from './HandParticleLayer'
 import { ProgressBar } from './ProgressBar'
 import { ShareCard, type ShareCardHandle } from './ShareCard'
@@ -114,6 +115,14 @@ export function MusicPlayer() {
     [showToast],
   )
 
+  const toggleCoverLayout = useCallback(() => {
+    setCoverLayout((prev) => {
+      const nextLayout = prev === 'orbit' ? 'flat' : 'orbit'
+      showToast(nextLayout === 'flat' ? '平铺列表 · 当前封面放大' : '环绕模式')
+      return nextLayout
+    })
+  }, [showToast])
+
   const handleUpload = useCallback(
     (draft: Omit<Song, 'id'>) => {
       const id = nextIdRef.current
@@ -174,12 +183,10 @@ export function MusicPlayer() {
           showToast('已暂停')
           break
         case 'swipe_left':
-          if (!next()) onBoundary('right')
-          else showToast('下一首')
+          if (next()) showToast('下一首')
           break
         case 'swipe_right':
-          if (!prev()) onBoundary('left')
-          else showToast('上一首')
+          if (prev()) showToast('上一首')
           break
         case 'thumb_up': {
           const liked = likedIdsRef.current.has(song.id)
@@ -197,11 +204,7 @@ export function MusicPlayer() {
           openShare()
           break
         case 'pinch':
-          setCoverLayout((prev) => {
-            const nextLayout = prev === 'orbit' ? 'flat' : 'orbit'
-            showToast(nextLayout === 'flat' ? '平铺列表 · 当前封面放大' : '环绕模式')
-            return nextLayout
-          })
+          toggleCoverLayout()
           break
         default:
           break
@@ -212,17 +215,18 @@ export function MusicPlayer() {
       pause,
       next,
       prev,
-      onBoundary,
       showToast,
       toggleLike,
       openShare,
+      toggleCoverLayout,
     ],
   )
 
-  const { videoRef, status, error, frame, frameRef } = useHandTracking({
-    enabled: handEnabled,
-    onGesture: handleHandGesture,
-  })
+  const { videoRef, status, error, frame, frameRef, loadProgress, loadLabel } =
+    useHandTracking({
+      enabled: handEnabled,
+      onGesture: handleHandGesture,
+    })
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow
@@ -263,6 +267,8 @@ export function MusicPlayer() {
       />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/85 via-[#f4f4f5]/92 to-[#ececef]" />
 
+      <FeatureIntro />
+
       {/* 摄像头手势粒子层 */}
       <HandParticleLayer
         videoRef={videoRef}
@@ -274,10 +280,12 @@ export function MusicPlayer() {
         lastGesture={lastGesture}
         burstGesture={burstGesture}
         shareMode={shareOpen}
+        loadProgress={loadProgress}
+        loadLabel={loadLabel}
         onToggle={() => setHandEnabled((v) => !v)}
       />
 
-      <div className="relative z-10 flex h-[100dvh] w-full max-w-xl flex-col px-4 pb-8 pt-12 sm:max-w-2xl sm:px-6">
+      <div className="relative z-10 flex h-[100dvh] w-full max-w-xl flex-col px-4 pb-12 pt-12 sm:max-w-2xl sm:px-6 sm:pb-14">
         <header className="relative shrink-0 text-center">
           <button
             type="button"
@@ -312,20 +320,21 @@ export function MusicPlayer() {
           songs={playlist}
           currentIndex={currentIndex}
           isPlaying={isPlaying}
-          canPrev={currentIndex > 0}
-          canNext={currentIndex < playlist.length - 1}
+          canPrev={playlist.length > 1}
+          canNext={playlist.length > 1}
           layout={coverLayout}
           onPrev={() => prev()}
           onNext={() => next()}
           onBoundary={onBoundary}
           onSelect={(index) => goTo(index)}
+          onToggleLayout={toggleCoverLayout}
         />
 
         <footer className="mt-auto shrink-0 space-y-4 pt-4">
           <Controls
             isPlaying={isPlaying}
-            canPrev={currentIndex > 0}
-            canNext={currentIndex < playlist.length - 1}
+            canPrev={playlist.length > 1}
+            canNext={playlist.length > 1}
             liked={liked}
             likedCount={likedSongs.length}
             onTogglePlay={() => {
@@ -339,10 +348,10 @@ export function MusicPlayer() {
               })
             }}
             onPrev={() => {
-              if (!prev()) onBoundary('left')
+              prev()
             }}
             onNext={() => {
-              if (!next()) onBoundary('right')
+              next()
             }}
             onToggleLike={() => {
               toggleLike(currentSong.id)
@@ -385,6 +394,18 @@ export function MusicPlayer() {
         </footer>
       </div>
 
+      <footer className="pointer-events-none absolute inset-x-0 bottom-3 z-10 px-4 text-center sm:bottom-4">
+        <p className="text-[11px] tracking-wide text-neutral-400">
+          <span className="text-neutral-500/80">Authors</span>
+          <span className="mx-2 text-neutral-300">·</span>
+          <span className="text-neutral-500">shilinzhu</span>
+          <span className="mx-1.5 text-neutral-300">,</span>
+          <span className="text-neutral-500">winniexin</span>
+          <span className="mx-1.5 text-neutral-300">,</span>
+          <span className="text-neutral-500">lewinzhou</span>
+        </p>
+      </footer>
+
       <FavoritesDrawer
         open={favoritesOpen}
         songs={likedSongs}
@@ -416,6 +437,7 @@ export function MusicPlayer() {
         open={gameOpen}
         songId={currentSong.id}
         songTitle={currentSong.title}
+        bpm={currentSong.bpm}
         currentTime={currentTime}
         duration={duration}
         isPlaying={isPlaying}

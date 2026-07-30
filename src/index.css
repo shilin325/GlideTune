@@ -21,3 +21,14 @@ body {
   background: #f4f4f5;
   user-select: none;
 }
+
+/** 当前封面按 BPM 脉冲（一拍一次） */
+@keyframes cover-beat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  14% {
+    transform: scale(1.05);
+  }
+}

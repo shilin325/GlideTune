@@ -48,6 +48,9 @@ interface HandParticleLayerProps {
   shareMode?: boolean
   /** 手势刚触发时通知粒子爆发 */
   burstGesture: { gesture: HandGesture; at: number } | null
+  /** 首次加载模型/资源进度 0~1 */
+  loadProgress?: number
+  loadLabel?: string
 }
 
 /**
@@ -66,6 +69,8 @@ export function HandParticleLayer({
   onToggle,
   shareMode = false,
   burstGesture,
+  loadProgress = 0,
+  loadLabel = '',
 }: HandParticleLayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const systemRef = useRef(new ParticleSystem())
@@ -164,24 +169,43 @@ export function HandParticleLayer({
       />
 
       {/* 控制条 */}
-      <div className="fixed left-4 top-4 z-40 flex max-w-[min(92vw,320px)] flex-col gap-2">
+      <div className="fixed left-4 top-4 z-40 flex max-w-[min(92vw,340px)] flex-col gap-2.5">
         <button
           type="button"
           onClick={onToggle}
-          className={`rounded-full border px-3.5 py-2 text-left text-xs font-medium backdrop-blur-md transition ${
+          className={`flex min-h-[48px] items-center gap-2.5 rounded-2xl border px-5 py-3 text-left text-sm font-semibold tracking-wide backdrop-blur-md transition ${
             enabled
-              ? 'border-neutral-800/20 bg-neutral-900 text-white'
-              : 'border-neutral-300/80 bg-white/75 text-neutral-700 shadow-sm hover:bg-white'
+              ? 'border-neutral-800/30 bg-neutral-900 text-white shadow-lg shadow-neutral-900/25 hover:bg-neutral-800'
+              : 'border-neutral-800/15 bg-neutral-900 text-white shadow-lg shadow-neutral-900/20 hover:bg-neutral-800 hover:shadow-xl hover:shadow-neutral-900/30'
           }`}
         >
-          {enabled ? '关闭手势交互' : '开启手势交互'}
+          <span
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/15"
+            aria-hidden
+          >
+            <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path
+                d="M8.5 14V7.5a1.5 1.5 0 013 0V13m0 0V6a1.5 1.5 0 013 0v7m0 0V7.5a1.5 1.5 0 013 0V14c0 3-2 5-5.5 5.5S6 17 6 14v-2.5a1.5 1.5 0 013 0V14"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+          <span className="flex flex-col leading-tight">
+            <span>{enabled ? '关闭手势交互' : '开启手势交互'}</span>
+            {!enabled && (
+              <span className="mt-0.5 text-[11px] font-normal tracking-normal text-white/55">
+                摄像头 · 21 关键点追踪
+              </span>
+            )}
+          </span>
         </button>
 
         {enabled && (
-          <div className="rounded-2xl border border-white/10 bg-black/55 px-3 py-2 text-[11px] leading-relaxed text-white/70 backdrop-blur-md">
+          <div className="rounded-2xl border border-white/10 bg-black/55 px-3 py-2.5 text-[11px] leading-relaxed text-white/70 backdrop-blur-md">
             <div className="mb-1 flex items-center gap-2">
               <span
-                className={`inline-block h-1.5 w-1.5 rounded-full ${
+                className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
                   status === 'ready'
                     ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
                     : status === 'loading'
@@ -190,12 +214,30 @@ export function HandParticleLayer({
                 }`}
               />
               <span>
-                {status === 'loading' && '加载 MediaPipe 模型…'}
+                {status === 'loading' && (loadLabel || '加载 MediaPipe 模型…')}
                 {status === 'ready' && (frame ? '追踪中 · 21 关键点' : '等待手部入镜')}
                 {status === 'denied' && '摄像头未授权'}
                 {status === 'error' && '初始化失败'}
               </span>
             </div>
+
+            {status === 'loading' && (
+              <div className="mt-1.5 space-y-1.5">
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-300 to-cyan-300 transition-[width] duration-200 ease-out"
+                    style={{ width: `${Math.max(4, Math.round(loadProgress * 100))}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-white/45">
+                  <span>首次加载约 20MB，完成后会缓存</span>
+                  <span className="tabular-nums text-white/60">
+                    {Math.round(loadProgress * 100)}%
+                  </span>
+                </div>
+              </div>
+            )}
+
             {error && <p className="text-rose-300/90">{error}</p>}
             {label && (
               <p className="mt-0.5 text-cyan-200/90 animate-fade-in">{label}</p>

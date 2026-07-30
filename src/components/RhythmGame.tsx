@@ -21,6 +21,8 @@ interface RhythmGameProps {
   open: boolean
   songId: number
   songTitle: string
+  /** 曲目 BPM，缺省由谱面生成器使用默认值 */
+  bpm?: number
   currentTime: number
   duration: number
   isPlaying: boolean
@@ -45,6 +47,7 @@ export function RhythmGame({
   open,
   songId,
   songTitle,
+  bpm,
   currentTime,
   duration,
   isPlaying,
@@ -66,7 +69,10 @@ export function RhythmGame({
   const [score, setScore] = useState<RhythmScore>(emptyScore())
   const [hint, setHint] = useState('张开手掌对准下落方块击打')
 
-  const chartKey = useMemo(() => `${songId}-${Math.floor(duration || 90)}`, [songId, duration])
+  const chartKey = useMemo(
+    () => `${songId}-${Math.floor(duration || 90)}-${bpm ?? 'default'}`,
+    [songId, duration, bpm],
+  )
 
   useEffect(() => {
     timeRef.current = currentTime
@@ -78,13 +84,13 @@ export function RhythmGame({
   // 开局 / 换歌重置谱面
   useEffect(() => {
     if (!open) return
-    notesRef.current = generateChart(songId, duration || 90)
+    notesRef.current = generateChart(songId, duration || 90, bpm)
     scoreRef.current = emptyScore()
     setScore(emptyScore())
     floatTexts.current = []
     hitFx.current = []
     setHint(handReady ? '手移到判定线上方击打方块' : '请开启摄像头手势后开始')
-  }, [open, chartKey, songId, duration, handReady])
+  }, [open, chartKey, songId, duration, bpm, handReady])
 
   // 主循环：绘制 + 碰撞
   useEffect(() => {

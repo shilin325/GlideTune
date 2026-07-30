@@ -2,8 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SONGS } from '../data/songs'
 import type { HandFrame, HandGesture } from '../hand/types'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
+import { useDetectedBpm } from '../hooks/useDetectedBpm'
 import { useHandTracking } from '../hooks/useHandTracking'
 import type { Song } from '../types'
+import {
+  hydrateStoredSong,
+  listStoredUploadedSongs,
+  saveUploadedSong,
+} from '../utils/songStorage'
 import { AlbumCover, type CoverLayout } from './AlbumCover'
 import { Controls } from './Controls'
 import { FavoritesDrawer } from './FavoritesDrawer'
@@ -42,6 +48,8 @@ export function MusicPlayer() {
     goTo,
     toggleLike,
   } = useAudioPlayer({ songs: playlist })
+
+  const { bpm: beatBpm } = useDetectedBpm(currentSong)
 
   const [shareOpen, setShareOpen] = useState(false)
   const [favoritesOpen, setFavoritesOpen] = useState(false)
@@ -83,6 +91,32 @@ export function MusicPlayer() {
   useEffect(() => {
     playlistRef.current = playlist
   }, [playlist])
+
+  // 启动时从 IndexedDB 恢复上传歌曲
+  useEffect(() => {
+    let cancelled = false
+    void listStoredUploadedSongs()
+      .then((rows) => {
+        if (cancelled || rows.length === 0) return
+        const uploaded = rows.map(hydrateStoredSong)
+        setPlaylist((prev) => {
+          const ids = new Set(prev.map((s) => s.id))
+          const fresh = uploaded.filter((s) => !ids.has(s.id))
+          if (fresh.length === 0) return prev
+          const next = [...prev, ...fresh]
+          playlistRef.current = next
+          const maxId = next.reduce((m, s) => Math.max(m, s.id), 0)
+          nextIdRef.current = Math.max(nextIdRef.current, maxId + 1)
+          return next
+        })
+      })
+      .catch((err) => {
+        console.warn('恢复上传歌曲失败', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const showToast = useCallback((message: string) => {
     setToast(message)
@@ -134,6 +168,10 @@ export function MusicPlayer() {
       // 传入最新列表并同步换源，避免 setTimeout / songsRef 竞态；不自动播放
       goTo(nextList.length - 1, false, nextList)
       showToast(`已加入播放列表 · ${song.title}`)
+      void saveUploadedSong(song).catch((err) => {
+        console.warn('上传歌曲持久化失败', err)
+        showToast('已加入列表，但本地保存失败')
+      })
     },
     [goTo, showToast],
   )
@@ -172,12 +210,15 @@ export function MusicPlayer() {
       if (!song) return
 
       switch (gesture) {
-        case 'open_palm':
+        case 'open_palm': {
+          // 在切换前记录状态：play() 成功后 isPlayingRef 已是 true，不能事后再读
+          const wasPlaying = isPlayingRef.current
           void togglePlay().then((ok) => {
             if (!ok) showToast('无法播放该音频')
-            else showToast(isPlayingRef.current ? '暂停' : '播放')
+            else showToast(wasPlaying ? '暂停' : '播放')
           })
           break
+        }
         case 'closed_fist':
           pause()
           showToast('已暂停')
@@ -323,6 +364,7 @@ export function MusicPlayer() {
           canPrev={playlist.length > 1}
           canNext={playlist.length > 1}
           layout={coverLayout}
+          beatBpm={beatBpm}
           onPrev={() => prev()}
           onNext={() => next()}
           onBoundary={onBoundary}
@@ -437,7 +479,7 @@ export function MusicPlayer() {
         open={gameOpen}
         songId={currentSong.id}
         songTitle={currentSong.title}
-        bpm={currentSong.bpm}
+        bpm={beatBpm}
         currentTime={currentTime}
         duration={duration}
         isPlaying={isPlaying}

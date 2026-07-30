@@ -36,6 +36,8 @@ interface AlbumCoverProps {
   canNext: boolean
   /** orbit = 三维环绕；flat = 平铺列表 */
   layout?: CoverLayout
+  /** 当前曲实测/有效 BPM，优先于 song.bpm 用于节拍动效 */
+  beatBpm?: number
   onPrev: () => boolean
   onNext: () => boolean
   onBoundary: (dir: 'left' | 'right') => void
@@ -56,6 +58,7 @@ export function AlbumCover({
   canPrev,
   canNext,
   layout = 'orbit',
+  beatBpm,
   onPrev,
   onNext,
   onBoundary,
@@ -250,7 +253,7 @@ export function AlbumCover({
                 style={
                   isPlaying
                     ? {
-                        animation: `cover-beat ${beatDurationMs(current.bpm)}ms ease-out infinite`,
+                        animation: `cover-beat ${beatDurationMs(beatBpm ?? current.bpm)}ms ease-out infinite`,
                       }
                     : undefined
                 }
@@ -363,7 +366,7 @@ export function AlbumCover({
                   alt={`${song.title} cover`}
                   active={isActive}
                   playing={isPlaying}
-                  bpm={song.bpm}
+                  bpm={isActive ? beatBpm ?? song.bpm : song.bpm}
                   side="front"
                 />
                 <CoverFace

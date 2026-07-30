@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Song } from '../types'
 import { toAudioBlob } from '../utils/audioFile'
+import { loadLikedIds, saveLikedIds } from '../utils/likedStorage'
 
 interface UseAudioPlayerOptions {
   songs: Song[]
@@ -61,13 +62,15 @@ export function useAudioPlayer({ songs, initialIndex = 0 }: UseAudioPlayerOption
   const switchingRef = useRef(false)
   /** 递增令牌：丢弃过期的 play / canplay 重试 */
   const playTokenRef = useRef(0)
+  /** onEnded 里调用最新 goTo，避免闭包过期 */
+  const goToRef = useRef<(index: number, autoPlay?: boolean) => boolean>(() => false)
 
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolumeState] = useState(0.7)
-  const [likedIds, setLikedIds] = useState<Set<number>>(new Set())
+  const [likedIds, setLikedIds] = useState<Set<number>>(() => loadLikedIds())
   const [coverKey, setCoverKey] = useState(0)
 
   // 渲染期同步，避免 goTo / play 读到旧列表
@@ -196,16 +199,15 @@ export function useAudioPlayer({ songs, initialIndex = 0 }: UseAudioPlayerOption
     const onTimeUpdate = () => setCurrentTime(audio.currentTime)
     const onLoaded = () => setDuration(audio.duration || 0)
     const onEnded = () => {
-      setCurrentIndex((idx) => {
-        const list = songsRef.current
-        if (list.length === 0) {
-          setIsPlaying(false)
-          isPlayingRef.current = false
-          return idx
-        }
-        // 首尾相接：播完最后一首回到第一首
-        return (idx + 1) % list.length
-      })
+      const list = songsRef.current
+      if (list.length === 0) {
+        setIsPlaying(false)
+        isPlayingRef.current = false
+        return
+      }
+      // 自然播完：切下一首并自动播放（首尾循环）
+      const nextIndex = (currentIndexRef.current + 1) % list.length
+      goToRef.current(nextIndex, true)
     }
     const onPlay = () => {
       switchingRef.current = false
@@ -215,6 +217,8 @@ export function useAudioPlayer({ songs, initialIndex = 0 }: UseAudioPlayerOption
     const onPause = () => {
       // 换源 / 主动 play 过程中 load 会触发 pause，不能当成用户暂停
       if (userPlayLockRef.current || switchingRef.current) return
+      // 自然播完也会触发 pause，交给 onEnded 切歌续播，勿清播放态
+      if (audio.ended) return
       setIsPlaying(false)
       isPlayingRef.current = false
     }
@@ -414,6 +418,7 @@ export function useAudioPlayer({ songs, initialIndex = 0 }: UseAudioPlayerOption
     },
     [loadSong, playAudio],
   )
+  goToRef.current = goTo
 
   const next = useCallback(() => {
     const len = songsRef.current.length
@@ -432,6 +437,7 @@ export function useAudioPlayer({ songs, initialIndex = 0 }: UseAudioPlayerOption
       const next = new Set(prev)
       if (next.has(songId)) next.delete(songId)
       else next.add(songId)
+      saveLikedIds(next)
       return next
     })
   }, [])

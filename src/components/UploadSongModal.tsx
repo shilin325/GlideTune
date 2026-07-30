@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import defaultCoverUrl from '../assets/default-cover.svg'
-import { DEFAULT_BPM, type Song } from '../types'
+import type { Song } from '../types'
 import { isMp3OrWavFile, toAudioBlob } from '../utils/audioFile'
 
 /** 由 Vite 打包的默认封面，避免 public 路径 / 编码问题 */
@@ -117,7 +117,6 @@ export function UploadSongModal({ open, onClose, onSubmit }: UploadSongModalProp
       artist: finalArtist,
       cover: coverUrl || DEFAULT_COVER,
       url: audioUrl,
-      bpm: DEFAULT_BPM,
       localFile: audioFile,
     })
     onClose()

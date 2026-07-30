@@ -1,7 +1,7 @@
 const HIGHLIGHTS = [
   { title: '摄像头手势', desc: '滑动切歌、张开掌心播放、握拳暂停、比耶分享' },
   { title: '三维环绕封面', desc: '滑动旋转、捏合切换平铺布局' },
-  { title: '节拍封面', desc: '播放时随歌曲 BPM 产生动效' },
+  { title: '节拍封面', desc: '播放时检测歌曲 BPM 并驱动封面动效' },
   { title: '本地上传', desc: '支持 MP3 / WAV 加入播放列表' },
   { title: '音符游戏', desc: '用手势击打下落的方块' },
 ]

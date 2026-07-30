@@ -18,7 +18,7 @@ export interface RhythmScore {
   miss: number
 }
 
-export const LANE_COUNT = 4
+export const LANE_COUNT = 2
 /** 音符从顶部落到判定线所需时间 */
 export const FALL_DURATION = 1.55
 /** Perfect / Good 判定窗口（秒） */

@@ -7,7 +7,7 @@ export interface Song {
   artist: string
   cover: string
   url: string
-  /** 曲目 BPM，用于封面节拍动效与节奏谱面 */
+  /** 可选 BPM 提示；未提供时由播放时音频检测 */
   bpm?: number
   /** 本地上传原始文件；blob URL 失效时可重建 */
   localFile?: Blob

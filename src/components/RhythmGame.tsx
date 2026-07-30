@@ -37,6 +37,15 @@ const HIT_FLASH: Record<Exclude<NoteJudgement, 'miss'>, string> = {
   perfect: '#f43f5e',
   good: '#0d9488',
 }
+/** 两列轨道总宽上限（居中），避免铺满屏幕显得太散 */
+const PLAYFIELD_MAX_WIDTH = 240
+
+function laneLayout(w: number) {
+  const usable = Math.min(PLAYFIELD_MAX_WIDTH, Math.max(160, w - 48))
+  const pad = (w - usable) / 2
+  const laneW = usable / LANE_COUNT
+  return { pad, usable, laneW }
+}
 
 /**
  * 打地鼠式下落音符：
@@ -119,9 +128,7 @@ export function RhythmGame({
     ro.observe(wrap)
 
     const laneCenterX = (lane: number, w: number) => {
-      const pad = 28
-      const usable = w - pad * 2
-      const laneW = usable / LANE_COUNT
+      const { pad, laneW } = laneLayout(w)
       return pad + laneW * (lane + 0.5)
     }
 
@@ -165,7 +172,8 @@ export function RhythmGame({
       const h = wrap.clientHeight
       const hitY = h * 0.78
       const noteH = 52
-      const noteW = Math.min(72, (w - 56) / LANE_COUNT - 12)
+      const { pad, usable, laneW } = laneLayout(w)
+      const noteW = Math.min(88, laneW - 16)
       const t = timeRef.current
 
       // 漏接
@@ -193,23 +201,22 @@ export function RhythmGame({
         const tip = frame.fingertips[1] ?? frame.palm
         handX = (1 - tip.x) * w
         handY = tip.y * h
-        const pad = 28
-        const usable = w - pad * 2
-        const laneW = usable / LANE_COUNT
-        const lane = Math.max(0, Math.min(LANE_COUNT - 1, Math.floor((handX - pad) / laneW)))
-        // 手在判定带附近才可击打
-        if (Math.abs(handY - hitY) < noteH * 1.35) {
-          tryHit(lane, t, handX, handY, hitY)
+        // 仅在居中轨道区域内判定左右列
+        if (handX >= pad && handX < pad + usable) {
+          const lane = Math.max(
+            0,
+            Math.min(LANE_COUNT - 1, Math.floor((handX - pad) / laneW)),
+          )
+          if (Math.abs(handY - hitY) < noteH * 1.35) {
+            tryHit(lane, t, handX, handY, hitY)
+          }
         }
       }
 
       // 绘制
       ctx.clearRect(0, 0, w, h)
 
-      // 背景轨道
-      const pad = 28
-      const usable = w - pad * 2
-      const laneW = usable / LANE_COUNT
+      // 背景轨道（居中收窄）
       for (let i = 0; i < LANE_COUNT; i++) {
         const x = pad + laneW * i
         ctx.fillStyle = i % 2 === 0 ? 'rgba(28,25,23,0.04)' : 'rgba(28,25,23,0.02)'
@@ -339,7 +346,10 @@ export function RhythmGame({
       <div ref={wrapRef} className="relative min-h-0 flex-1 touch-none">
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
         {/* 触摸兜底：点按轨道击打 */}
-        <div className="absolute inset-x-0 bottom-[18%] z-10 grid h-24 grid-cols-4 px-7">
+        <div
+          className="absolute bottom-[18%] left-1/2 z-10 grid h-24 -translate-x-1/2 grid-cols-2"
+          style={{ width: `min(${PLAYFIELD_MAX_WIDTH}px, calc(100% - 3rem))` }}
+        >
           {Array.from({ length: LANE_COUNT }, (_, lane) => (
             <button
               key={lane}
@@ -371,9 +381,7 @@ export function RhythmGame({
                 const wrap = wrapRef.current
                 const w = wrap?.clientWidth ?? 300
                 const h = wrap?.clientHeight ?? 500
-                const pad = 28
-                const usable = w - pad * 2
-                const laneW = usable / LANE_COUNT
+                const { pad, laneW } = laneLayout(w)
                 const cx = pad + laneW * (lane + 0.5)
                 const color = HIT_FLASH[judgement]
                 hitFx.current.push({ lane, life: 1, color })

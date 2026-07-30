@@ -285,6 +285,15 @@ export const ShareCard = forwardRef<ShareCardHandle, ShareCardProps>(function Sh
           分享歌曲
         </div>
 
+        <div className="bg-neutral-900 px-4 py-3 text-center">
+          <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-white/45">
+            手势操作
+          </p>
+          <p className="mt-1 text-[13px] font-medium leading-snug text-white">
+            上下滑换色 · 点赞保存 · 点踩取消
+          </p>
+        </div>
+
         <div className="px-5 py-5">
           <div className="mx-auto aspect-[3/4] w-full overflow-hidden rounded-2xl bg-neutral-100">
             {busy && (
@@ -333,10 +342,6 @@ export const ShareCard = forwardRef<ShareCardHandle, ShareCardProps>(function Sh
               })}
             </div>
           </div>
-
-          <p className="mt-3 text-center text-xs text-neutral-400">
-            上/下滑换色 · 点赞保存 · 点踩取消
-          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-0 border-t border-neutral-100">

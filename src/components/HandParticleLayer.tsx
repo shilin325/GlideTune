@@ -240,13 +240,8 @@ export function HandParticleLayer({
 
             {error && <p className="text-rose-300/90">{error}</p>}
             {label && (
-              <p className="mt-0.5 text-cyan-200/90 animate-fade-in">{label}</p>
-            )}
-            {!error && status === 'ready' && (
-              <p className="mt-1 text-white/40">
-                {shareMode
-                  ? '分享中：上下滑换色 · 点赞保存 · 点踩取消'
-                  : '左/右滑切歌 · 张开播放 · 握拳暂停 · 点赞收藏 · 比耶分享'}
+              <p className="mt-1 rounded-lg bg-cyan-400/15 px-2 py-1 text-[12px] font-medium text-cyan-100 animate-fade-in">
+                {label}
               </p>
             )}
           </div>

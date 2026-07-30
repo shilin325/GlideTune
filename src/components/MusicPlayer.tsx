@@ -332,7 +332,7 @@ export function MusicPlayer() {
             type="button"
             onClick={openRhythmGame}
             aria-label="打开音符游戏"
-            className="absolute left-0 top-1/2 flex -translate-y-1/2 items-center gap-1.5 rounded-full border border-neutral-200/80 bg-white/80 px-3 py-1.5 text-xs font-medium text-neutral-600 shadow-sm backdrop-blur-md transition hover:bg-white hover:text-neutral-900"
+            className="absolute left-0 top-0 flex items-center gap-1.5 rounded-full border border-neutral-200/80 bg-white/80 px-3 py-1.5 text-xs font-medium text-neutral-600 shadow-sm backdrop-blur-md transition hover:bg-white hover:text-neutral-900"
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="4" y="4" width="6" height="6" rx="1.5" />
@@ -348,13 +348,21 @@ export function MusicPlayer() {
             type="button"
             onClick={() => setUploadOpen(true)}
             aria-label="上传歌曲"
-            className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-1.5 rounded-full border border-neutral-200/80 bg-white/80 px-3 py-1.5 text-xs font-medium text-neutral-600 shadow-sm backdrop-blur-md transition hover:bg-white hover:text-neutral-900"
+            className="absolute right-0 top-0 flex items-center gap-1.5 rounded-full border border-neutral-200/80 bg-white/80 px-3 py-1.5 text-xs font-medium text-neutral-600 shadow-sm backdrop-blur-md transition hover:bg-white hover:text-neutral-900"
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14M5 12h14" strokeLinecap="round" />
             </svg>
             上传
           </button>
+          <div className="mx-auto mt-3 max-w-md rounded-2xl border border-neutral-800/10 bg-neutral-900 px-3.5 py-2.5 text-center shadow-lg shadow-neutral-900/10">
+            <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-white/45">
+              手势操作
+            </p>
+            <p className="mt-1 text-[12px] font-medium leading-snug text-white/90">
+              左/右滑切歌 · 张开播放 · 握拳暂停 · 点赞收藏 · 比耶分享
+            </p>
+          </div>
         </header>
 
         <AlbumCover
